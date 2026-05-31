@@ -4,6 +4,7 @@
 
 import time
 import random
+import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -77,59 +78,64 @@ def _slow_scroll(driver: webdriver.Chrome) -> None:
 
 def _parse_listing(card) -> dict | None:
     """
-    Извлекает данные из одного HTML-элемента карточки объявления.
-    Возвращает словарь с данными или None, если карточка не подходит.
-
-    Каждое поле обёрнуто в try-except: если у объявления нет цены или
-    рейтинга — это не ошибка, просто ставим None и идём дальше.
+    Извлекает данные из одной карточки объявления.
+    Все селекторы проверены на реальном HTML Avito (май 2025).
     """
     result = {}
 
-    # --- Название ---
+    # --- Название + Ссылка ---
+    # data-marker='item-title' — это тег <a>, поэтому сразу берём и текст и href
     try:
-        # Ищем тег с заголовком объявления. Селектор может меняться — Avito обновляет вёрстку.
-        title_el = card.find_element(By.CSS_SELECTOR, "[itemprop='name']")
+        title_el = card.find_element(By.CSS_SELECTOR, "[data-marker='item-title']")
         result["title"] = title_el.text.strip()
+        href = title_el.get_attribute("href")
+        # Avito возвращает относительные ссылки вида /moskva/..., добавляем домен
+        result["url"] = href if href.startswith("http") else BASE_URL + href
     except NoSuchElementException:
-        # Если названия нет — эту карточку пропускаем целиком (это не объявление)
+        # Нет заголовка = это не объявление (баннер, реклама), пропускаем
         return None
 
     # --- Цена ---
+    # data-marker='item-price-value' содержит текст вида "от 500₽" или "Цена договорная"
+    # Важно: используем .text, а НЕ .get_attribute("content") — у этого элемента нет атрибута content
     try:
-        price_el = card.find_element(By.CSS_SELECTOR, "[itemprop='price']")
-        # Атрибут content содержит чистое число, в отличие от текста на экране
-        result["price_raw"] = price_el.get_attribute("content")
+        price_el = card.find_element(By.CSS_SELECTOR, "[data-marker='item-price-value']")
+        result["price_raw"] = price_el.text.strip()
     except NoSuchElementException:
-        result["price_raw"] = None  # Цена "договорная" или не указана
+        result["price_raw"] = None
 
     # --- Имя продавца ---
+    # Блок продавца — это <a href="/brands/..."> или <a href="/user/...">
+    # Внутри этой ссылки первый <p> содержит имя продавца.
+    # У части карточек (новые продавцы без профиля) этого блока нет вообще — это нормально.
     try:
-        seller_el = card.find_element(By.CSS_SELECTOR, "[data-marker='seller-info/name']")
-        result["seller_name"] = seller_el.text.strip()
+        # href*='/brands/' означает "href содержит /brands/" — CSS-селектор substring
+        seller_link = card.find_element(
+            By.CSS_SELECTOR, "a[href*='/brands/'], a[href*='/user/']"
+        )
+        # Внутри ссылки ищем первый <p> — это имя. Рейтинг и отзывы идут после.
+        seller_name_el = seller_link.find_element(By.TAG_NAME, "p")
+        result["seller_name"] = seller_name_el.text.strip()
     except NoSuchElementException:
         result["seller_name"] = None
 
-    # --- Рейтинг продавца ---
+    # --- Рейтинг ---
+    # ИСПРАВЛЕНО: был 'seller-info/rating' — такого маркера не существует на Avito
+    # Правильный маркер: 'seller-info/score' (содержит число вида "4,7")
     try:
-        rating_el = card.find_element(By.CSS_SELECTOR, "[data-marker='seller-info/rating']")
+        rating_el = card.find_element(By.CSS_SELECTOR, "[data-marker='seller-info/score']")
         result["rating"] = rating_el.text.strip()
     except NoSuchElementException:
-        result["rating"] = None  # У новых продавцов рейтинга нет — это ок
+        result["rating"] = None
 
     # --- Количество отзывов ---
+    # ИСПРАВЛЕНО: был 'seller-info/score' — это рейтинг, а не отзывы
+    # Правильный маркер: 'seller-info/summary' (содержит текст вида "124 отзыва")
     try:
-        reviews_el = card.find_element(By.CSS_SELECTOR, "[data-marker='seller-info/score']")
+        reviews_el = card.find_element(By.CSS_SELECTOR, "[data-marker='seller-info/summary']")
         result["reviews_count"] = reviews_el.text.strip()
     except NoSuchElementException:
         result["reviews_count"] = None
-
-    # --- Ссылка на объявление ---
-    try:
-        link_el = card.find_element(By.CSS_SELECTOR, "a[itemprop='url']")
-        href = link_el.get_attribute("href")
-        result["url"] = href if href.startswith("http") else BASE_URL + href
-    except NoSuchElementException:
-        result["url"] = None
 
     return result
 
@@ -196,7 +202,8 @@ def parse_avito(query: str, city: str) -> list[dict]:
 
         # Скроллим страницу, чтобы подгрузить все объявления
         _slow_scroll(driver)
-
+        #with open("avito_page.html", "w", encoding="utf-8") as f:
+            #f.write(driver.page_source)
         # Собираем все найденные карточки объявлений
         cards = driver.find_elements(By.CSS_SELECTOR, "[data-marker='item']")
         print(f"[Parser] Найдено карточек на странице: {len(cards)}")
