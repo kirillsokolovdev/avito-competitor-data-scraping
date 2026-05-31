@@ -76,10 +76,31 @@ def _slow_scroll(driver: webdriver.Chrome) -> None:
         time.sleep(random.uniform(0.1, 0.4))
 
 
+def _extract_price(price_text: str) -> float | None:
+    numbers = re.findall(r"\d+", price_text.replace(" ", ""))
+    if not numbers:
+        return None
+    return float("".join(numbers))
+
+
+def _extract_rating(rating_text: str) -> float | None:
+    try:
+        return float(rating_text.replace(",", "."))
+    except:
+        return None
+
+
+def _extract_reviews(reviews_text: str) -> int:
+    numbers = re.findall(r"\d+", reviews_text)
+    if not numbers:
+        return 0
+    return int(numbers[0])
+
+
 def _parse_listing(card) -> dict | None:
     """
     Извлекает данные из одной карточки объявления.
-    Все селекторы проверены на реальном HTML Avito (май 2025).
+    Все селекторы проверены на реальном HTML Avito (май 2026).
     """
     result = {}
 
@@ -100,7 +121,9 @@ def _parse_listing(card) -> dict | None:
     # Важно: используем .text, а НЕ .get_attribute("content") — у этого элемента нет атрибута content
     try:
         price_el = card.find_element(By.CSS_SELECTOR, "[data-marker='item-price-value']")
-        result["price_raw"] = price_el.text.strip()
+        price_text = price_el.text.strip()
+        result["price_raw"] = price_text
+        result["price"] = _extract_price(price_text)
     except NoSuchElementException:
         result["price_raw"] = None
 
@@ -124,7 +147,9 @@ def _parse_listing(card) -> dict | None:
     # Правильный маркер: 'seller-info/score' (содержит число вида "4,7")
     try:
         rating_el = card.find_element(By.CSS_SELECTOR, "[data-marker='seller-info/score']")
-        result["rating"] = rating_el.text.strip()
+        rating_text = rating_el.text.strip()
+        result["rating_raw"] = rating_text
+        result["rating"] = _extract_rating(rating_text)
     except NoSuchElementException:
         result["rating"] = None
 
@@ -133,9 +158,11 @@ def _parse_listing(card) -> dict | None:
     # Правильный маркер: 'seller-info/summary' (содержит текст вида "124 отзыва")
     try:
         reviews_el = card.find_element(By.CSS_SELECTOR, "[data-marker='seller-info/summary']")
-        result["reviews_count"] = reviews_el.text.strip()
+        reviews_text = reviews_el.text.strip()
+        result["reviews_raw"] = reviews_text
+        result["reviews_count"] = _extract_reviews(reviews_text)
     except NoSuchElementException:
-        result["reviews_count"] = None
+        result["reviews_count"] = 0
 
     return result
 
@@ -202,8 +229,6 @@ def parse_avito(query: str, city: str) -> list[dict]:
 
         # Скроллим страницу, чтобы подгрузить все объявления
         _slow_scroll(driver)
-        #with open("avito_page.html", "w", encoding="utf-8") as f:
-            #f.write(driver.page_source)
         # Собираем все найденные карточки объявлений
         cards = driver.find_elements(By.CSS_SELECTOR, "[data-marker='item']")
         print(f"[Parser] Найдено карточек на странице: {len(cards)}")
@@ -237,8 +262,8 @@ if __name__ == "__main__":
     test_data = parse_avito(query="ремонт ноутбуков", city="Москва")
 
     if test_data:
-        print("\n--- Первые 3 результата ---")
-        for item in test_data[:3]:
+        #print("\n--- Первые 3 результата ---")
+        for item in test_data:
             print(item)
     else:
         print("\nДанные не собраны. Проверь подключение или селекторы.")
