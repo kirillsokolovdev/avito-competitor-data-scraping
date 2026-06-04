@@ -359,8 +359,8 @@ def parse_avito(query: str, city: str) -> list[dict]:
 if __name__ == "__main__":
 
     test_data = parse_avito(
-        query="ремонт ноутбуков",
-        city="Москва"
+        query="iPhone 15",
+        city="Казань"
     )
 
     if test_data:

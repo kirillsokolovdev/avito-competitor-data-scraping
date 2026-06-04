@@ -129,7 +129,7 @@ def _style_excel(filepath: str) -> None:
     wb = load_workbook(filepath)
 
     # Граница — одна на весь файл, используется в каждой ячейке обоих листов
-    thin_side   = Side(style="thin", color="CCCCCC")
+    thin_side = Side(style="thin", color="CCCCCC")
     cell_border = Border(
         left=thin_side, right=thin_side,
         top=thin_side,  bottom=thin_side
@@ -140,19 +140,19 @@ def _style_excel(filepath: str) -> None:
 
     # Заливки строк
     header_fill = PatternFill("solid", fgColor="1E3A5F")  # тёмно-синий
-    even_fill   = PatternFill("solid", fgColor="D5E8F0")  # светло-голубой
-    odd_fill    = PatternFill("solid", fgColor="FFFFFF")  # белый
+    even_fill = PatternFill("solid", fgColor="D5E8F0")  # светло-голубой
+    odd_fill = PatternFill("solid", fgColor="FFFFFF")  # белый
 
     # Шрифты
     header_font = Font(bold=True, color="FFFFFF", size=11)
     normal_font = Font(size=10, color="1A1A1A")
-    link_font   = Font(size=10, color="2E75B6", underline="single")
+    link_font = Font(size=10, color="2E75B6", underline="single")
 
     # Строка 1 — заголовки таблицы
     for cell in ws_data[1]:
-        cell.fill      = header_fill
-        cell.font      = header_font
-        cell.border    = cell_border
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = cell_border
         cell.alignment = Alignment(
             horizontal="center", vertical="center", wrap_text=True
         )
@@ -166,15 +166,15 @@ def _style_excel(filepath: str) -> None:
         row_fill = even_fill if row[0].row % 2 == 0 else odd_fill
 
         for cell in row:
-            cell.fill   = row_fill
+            cell.fill = row_fill
             cell.border = cell_border
 
             if cell.column == url_col_idx and cell.value:
                 # Ссылки оформляем как гиперссылки
-                cell.font      = link_font
+                cell.font = link_font
                 cell.alignment = Alignment(horizontal="left", vertical="center")
             else:
-                cell.font      = normal_font
+                cell.font = normal_font
                 cell.alignment = Alignment(horizontal="left", vertical="center")
 
     # Числовые колонки: № (1), Цена (3), Рейтинг (5), Отзывы (6) — по центру
@@ -207,13 +207,13 @@ def _style_excel(filepath: str) -> None:
 
     # Заливки
     summary_header_fill = PatternFill("solid", fgColor="1E3A5F")  # тёмно-синий
-    separator_fill      = PatternFill("solid", fgColor="F0F4F8")  # светло-серый
+    separator_fill = PatternFill("solid", fgColor="F0F4F8")  # светло-серый
 
     # Шрифты
     summary_header_font = Font(bold=True, color="FFFFFF", size=12)
-    label_font          = Font(size=11, color="444444")
-    value_font          = Font(bold=True, size=12, color="1E3A5F")
-    separator_font      = Font(size=9, color="AAAAAA")
+    label_font = Font(size=11, color="444444")
+    value_font = Font(bold=True, size=12, color="1E3A5F")
+    separator_font = Font(size=9, color="AAAAAA")
 
     for row in ws_summary.iter_rows():
         label_cell = row[0]
@@ -223,33 +223,33 @@ def _style_excel(filepath: str) -> None:
         if label_cell.row == 1:
             # Строка заголовка — Pandas пишет сюда названия колонок
             for cell in row:
-                cell.fill      = summary_header_fill
-                cell.font      = summary_header_font
-                cell.border    = cell_border
+                cell.fill = summary_header_fill
+                cell.font = summary_header_font
+                cell.border = cell_border
                 cell.alignment = Alignment(
                     horizontal="center", vertical="center"
                 )
 
-        elif "─" in label_text:
+        elif "--" in label_text: # ─
             # Визуальный разделитель между блоками
             for cell in row:
-                cell.fill      = separator_fill
-                cell.font      = separator_font
-                cell.border    = cell_border
+                cell.fill = separator_fill
+                cell.font = separator_font
+                cell.border = cell_border
                 cell.alignment = Alignment(
                     horizontal="center", vertical="center"
                 )
 
         else:
             # Обычная строка с данными
-            label_cell.border    = cell_border
-            label_cell.font      = label_font
+            label_cell.border = cell_border
+            label_cell.font = label_font
             label_cell.alignment = Alignment(
                 horizontal="left", vertical="center", indent=1
             )
             if value_cell:
-                value_cell.border    = cell_border
-                value_cell.font      = value_font
+                value_cell.border = cell_border
+                value_cell.font = value_font
                 value_cell.alignment = Alignment(
                     horizontal="left", vertical="center", indent=1
                 )
@@ -282,34 +282,34 @@ def save_to_excel(df: pd.DataFrame, summary: dict,
     })
 
     # Строки топ-продавцов для листа "Сводка"
-    top      = summary["top_sellers"]
+    top = summary["top_sellers"]
     top_rows = []
     for i, row in top.iterrows():
-        rating_str  = str(row["rating"]).replace(".", ",") if pd.notna(row["rating"])        else "—"
-        reviews_str = str(int(row["reviews_count"]))       if pd.notna(row["reviews_count"]) else "—"
+        rating_str = str(row["rating"]).replace(".", ",") if pd.notna(row["rating"]) else "--"
+        reviews_str = str(int(row["reviews_count"])) if pd.notna(row["reviews_count"]) else "--"
         top_rows.append({
-            "Показатель": f"🥇 Топ-{i + 1}: {row['seller_name']}",
+            "Показатель": f"Топ-{i + 1}: {row['seller_name']}",
             "Значение":   f"Рейтинг {rating_str} · {reviews_str} отзывов",
         })
 
     # Строковое представление цен
-    median_str = f"{int(summary['median_price'])} ₽" if summary["median_price"] else "—"
-    min_str    = f"{summary['min_price']} ₽"         if summary["min_price"]    else "—"
-    max_str    = f"{summary['max_price']} ₽"         if summary["max_price"]    else "—"
+    median_str = f"{int(summary['median_price'])} ₽" if summary["median_price"] else "--"
+    min_str = f"{summary['min_price']} ₽" if summary["min_price"] else "--"
+    max_str = f"{summary['max_price']} ₽" if summary["max_price"] else "--"
 
     # Данные листа "Сводка".
     # Pandas автоматически сделает строку 1 из ключей словаря ("Показатель", "Значение"),
     # поэтому первую строку-заголовок добавлять вручную не нужно.
     summary_rows = [
-        {"Показатель": "📍 Запрос",            "Значение": query},
-        {"Показатель": "🏙️ Город",              "Значение": city},
-        {"Показатель": "📦 Всего объявлений",   "Значение": summary["total_listings"]},
-        {"Показатель": "💰 С указанной ценой",  "Значение": summary["listings_with_price"]},
-        {"Показатель": "─" * 25,                "Значение": "─" * 20},
-        {"Показатель": "📊 Медианная цена",     "Значение": median_str},
-        {"Показатель": "📉 Минимальная цена",   "Значение": min_str},
-        {"Показатель": "📈 Максимальная цена",  "Значение": max_str},
-        {"Показатель": "─" * 25,                "Значение": "─" * 20},
+        {"Показатель": "Запрос",             "Значение": query},
+        {"Показатель": "Город",              "Значение": city},
+        {"Показатель": "Всего объявлений",   "Значение": summary["total_listings"]},
+        {"Показатель": "С указанной ценой",  "Значение": summary["listings_with_price"]},
+        {"Показатель": "─" * 25,             "Значение": "─" * 20},
+        {"Показатель": "Медианная цена",     "Значение": median_str},
+        {"Показатель": "Минимальная цена",   "Значение": min_str},
+        {"Показатель": "Максимальная цена",  "Значение": max_str},
+        {"Показатель": "─" * 25,             "Значение": "─" * 20},
         *top_rows,
     ]
     df_summary = pd.DataFrame(summary_rows)
@@ -317,7 +317,7 @@ def save_to_excel(df: pd.DataFrame, summary: dict,
     # Записываем оба листа в один файл
     with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
         df_export.to_excel(writer, sheet_name="Все объявления", index=False)
-        df_summary.to_excel(writer, sheet_name="Сводка",        index=False)
+        df_summary.to_excel(writer, sheet_name="Сводка", index=False)
 
     # Стилизуем уже сохранённый файл
     _style_excel(filepath)
@@ -342,13 +342,13 @@ def analyze(listings: list[dict],
     """
     print(f"[Analytics] Обрабатываем {len(listings)} объявлений...")
 
-    df      = build_dataframe(listings)
+    df = build_dataframe(listings)
     summary = build_summary(df)
-    path    = save_to_excel(df, summary, query, city)
+    path = save_to_excel(df, summary, query, city)
 
     print(f"[Analytics] Медианная цена: {summary['median_price']} ₽")
     print(f"[Analytics] Топ продавцов: "
-          f"{list(summary['top_sellers']['seller_name']) if not summary['top_sellers'].empty else '—'}")
+          f"{list(summary['top_sellers']['seller_name']) if not summary['top_sellers'].empty else '--'}")
 
     return summary, path
 
@@ -360,30 +360,55 @@ def analyze(listings: list[dict],
 if __name__ == "__main__":
     # Тестовые данные — имитируют вывод parser.py
     # Используем их чтобы проверить analytics.py независимо от парсера
-    fake_listings = [
-        {"title": "Ремонт ноутбуков", "price_raw": "от 500₽",
-         "seller_name": "Николай", "rating": "5,0", "reviews_count": "72 отзыва",
-         "url": "https://avito.ru/1"},
-        {"title": "Компьютерный мастер", "price_raw": "Цена договорная",
-         "seller_name": "Компьютерный мастер", "rating": "4,7", "reviews_count": "124 отзыва",
-         "url": "https://avito.ru/2"},
-        {"title": "Ремонт ПК и ноутбуков", "price_raw": "от 1 000₽",
-         "seller_name": "Алексей", "rating": "5,0", "reviews_count": "69 отзывов",
-         "url": "https://avito.ru/3"},
-        {"title": "Установка Windows", "price_raw": "990₽",
-         "seller_name": None, "rating": None, "reviews_count": None,
-         "url": "https://avito.ru/4"},
-        {"title": "Ремонт MacBook", "price_raw": "от 800₽",
-         "seller_name": "Богдан", "rating": "5,0", "reviews_count": "186 отзывов",
-         "url": "https://avito.ru/5"},
+    test_listings = [
+        {'title': 'iPhone 15, 256 ГБ',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_256_gb_7970944235?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '38 490 ₽', 'price': 38490.0, 'seller_name': 'ONE HUB', 'rating_raw': '5,0', 'rating': 5.0,
+         'reviews_raw': '846 отзывов', 'reviews_count': 846},
+        {'title': 'iPhone 15, 128 ГБ',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_128_gb_7907462028?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '32 990 ₽', 'price': 32990.0, 'seller_name': 'ONE HUB', 'rating_raw': '5,0', 'rating': 5.0,
+         'reviews_raw': '846 отзывов', 'reviews_count': 846},
+        {'title': 'iPhone 15, 128 ГБ',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_128_gb_7907555236?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '37 990 ₽', 'price': 37990.0, 'seller_name': 'ONE HUB', 'rating_raw': '5,0', 'rating': 5.0,
+         'reviews_raw': '846 отзывов', 'reviews_count': 846},
+        {'title': 'iPhone 15, 128 ГБ',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_128_gb_7811845416?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '37 990 ₽', 'price': 37990.0, 'seller_name': 'IRON APPLE', 'rating_raw': '5,0', 'rating': 5.0,
+         'reviews_raw': '1 419 отзывов', 'reviews_count': 1},
+        {'title': 'iPhone 15, 256 ГБ',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_256_gb_7737598028?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '44 990 ₽', 'price': 44990.0, 'seller_name': 'IMOFF', 'rating_raw': '4,9', 'rating': 4.9,
+         'reviews_raw': '1 059 отзывов', 'reviews_count': 1},
+        {'title': 'iPhone 15, 256 ГБ',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_256_gb_7907001924?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '38 490 ₽', 'price': 38490.0, 'seller_name': 'ONE HUB', 'rating_raw': '5,0', 'rating': 5.0,
+         'reviews_raw': '846 отзывов', 'reviews_count': 846},
+        {'title': 'iPhone 15, 256 ГБ, eSIM',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_256_gb_esim_7911860396?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '45 990 ₽', 'price': 45990.0, 'seller_name': 'ЛЮМО - магазин техники', 'rating_raw': '5,0',
+         'rating': 5.0, 'reviews_raw': '64 отзыва', 'reviews_count': 64},
+        {'title': 'iPhone 15, 128 ГБ',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_128_gb_7769033310?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '37 990 ₽', 'price': 37990.0, 'seller_name': 'IMOFF', 'rating_raw': '4,9', 'rating': 4.9,
+         'reviews_raw': '1 059 отзывов', 'reviews_count': 1},
+        {'title': 'iPhone 15, 256 ГБ',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_256_gb_7907408837?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '44 990 ₽', 'price': 44990.0, 'seller_name': 'ONE HUB', 'rating_raw': '5,0', 'rating': 5.0,
+         'reviews_raw': '846 отзывов', 'reviews_count': 846},
+        {'title': 'iPhone 15, 128 ГБ, SIM + eSIM',
+         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_128_gb_sim_esim_8192891764?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
+         'price_raw': '38 900 ₽', 'price': 38900.0, 'seller_name': 'UpStore - iPhone.', 'rating_raw': '4,9',
+         'rating': 4.9, 'reviews_raw': '773 отзыва', 'reviews_count': 773},
     ]
 
-    summary, excel_path = analyze(fake_listings, query="ремонт ноутбуков", city="Москва")
+    summary, excel_path = analyze(test_listings, query="iPhone 15", city="Казань")
 
     print("\n--- Сводка ---")
-    print(f"Всего объявлений:   {summary['total_listings']}")
-    print(f"Медианная цена:     {summary['median_price']} ₽")
-    print(f"Диапазон цен:       {summary['min_price']} — {summary['max_price']} ₽")
+    print(f"Всего объявлений: {summary['total_listings']}")
+    print(f"Медианная цена: {summary['median_price']} ₽")
+    print(f"Диапазон цен: {summary['min_price']} - {summary['max_price']} ₽")
     print(f"\nТоп-3 продавца:")
     print(summary["top_sellers"][["seller_name", "rating", "reviews_count"]].to_string(index=False))
     print(f"\nФайл сохранён: {excel_path}")
