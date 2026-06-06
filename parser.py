@@ -46,7 +46,7 @@ def _build_driver() -> webdriver.Chrome:
     )
 
     # Enable headless mode for production deployment
-    # options.add_argument("--headless=new")
+    options.add_argument("--headless=new")
 
     # Recommended Chrome stability flags
     options.add_argument("--no-sandbox")
