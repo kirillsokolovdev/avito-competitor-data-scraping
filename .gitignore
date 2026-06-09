@@ -1,6 +1,32 @@
-venv/
-.idea/
+# Python cache
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables
 .env
-output/
-*.pyc
+
+# Generated Excel reports
+output/*.xlsx
+
+# IDE settings
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Selenium / webdriver temporary files
+*.log
+
+# Pytest cache
+.pytest_cache/
+
+# Coverage reports
+.coverage
+htmlcov/
