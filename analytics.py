@@ -1,10 +1,9 @@
 # analytics.py
-# Run locally:
-#     python analytics.py
-#
 # Required packages:
 #     pip install pandas openpyxl
 
+
+import logging
 import os
 import pandas as pd
 from openpyxl import load_workbook
@@ -13,11 +12,20 @@ from openpyxl.styles import (
 )
 
 
+# Configure application-wide logging.
+# Example output:
+# 2026-01-01 12:00:00 [INFO] Processing 20 listings...
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+log = logging.getLogger(__name__)
+
 # Directory where generated Excel reports will be stored
 OUTPUT_DIR = "output"
 
 # Default output file path
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "competitor_report.xlsx")
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "report.xlsx")
 
 
 def build_dataframe(listings: list[dict]) -> pd.DataFrame:
@@ -356,7 +364,7 @@ def save_to_excel(df: pd.DataFrame, summary: dict,
     # Apply post-processing styles
     _style_excel(filepath)
 
-    print(f"[Analytics] Excel saved: {filepath}")
+    log.info(f"Excel report saved: {filepath}")
 
     return filepath
 
@@ -375,52 +383,10 @@ def analyze(listings: list[dict],
 
     This is the only function bot.py needs to call.
     """
-    print(f"[Analytics] Processing {len(listings)} listings...")
+    log.info(f"Processing {len(listings)} listings...")
 
     df = build_dataframe(listings)
     summary = build_summary(df)
     path = save_to_excel(df, summary, query, city)
 
-    print(f"[Analytics] Median price: {summary['median_price']} ₽")
-
-    print(
-        f"[Analytics] Top sellers: "
-        f"{list(summary['top_sellers']['seller_name']) if not summary['top_sellers'].empty else '--'}"
-    )
-
     return summary, path
-
-
-if __name__ == "__main__":
-
-    # Fake dataset used for standalone analytics testing
-    test_listings = [
-        {'title': 'iPhone 15, 256 ГБ',
-         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_256_gb_7970944235?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
-         'price_raw': '38 490 ₽', 'price': 38490.0, 'seller_name': 'ONE HUB', 'rating_raw': '5,0', 'rating': 5.0,
-         'reviews_raw': '846 отзывов', 'reviews_count': 846},
-        {'title': 'iPhone 15, 128 ГБ',
-         'url': 'https://www.avito.ru/kazan/telefony/iphone_15_128_gb_7907462028?context=H4sIAAAAAAAA_wE_AMD_YToyOntzOjEzOiJsb2NhbFByaW9yaXR5IjtiOjA7czoxOiJ4IjtzOjE2OiJRZk84TFRZNzN0Mjl4cnF4Ijt9ddgDVD8AAAA',
-         'price_raw': '32 990 ₽', 'price': 32990.0, 'seller_name': 'ONE HUB', 'rating_raw': '5,0', 'rating': 5.0,
-         'reviews_raw': '846 отзывов', 'reviews_count': 846},
-    ]
-
-    summary, excel_path = analyze(
-        test_listings,
-        query="iPhone 15",
-        city="Казань"
-    )
-
-    print("\n--- Summary ---")
-    print(f"Total listings: {summary['total_listings']}")
-    print(f"Median price: {summary['median_price']} ₽")
-    print(f"Price range: {summary['min_price']} - {summary['max_price']} ₽")
-
-    print("\nTop sellers:")
-    print(
-        summary["top_sellers"][
-            ["seller_name", "rating", "reviews_count"]
-        ].to_string(index=False)
-    )
-
-    print(f"\nExcel report saved: {excel_path}")

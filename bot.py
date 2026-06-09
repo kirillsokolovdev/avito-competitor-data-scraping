@@ -1,6 +1,6 @@
 # bot.py
-# Запуск: python bot.py
-# Зависимости: pip install aiogram python-dotenv
+# Run: python bot.py
+# Dependencies: pip install aiogram python-dotenv
 
 import asyncio
 import logging
@@ -18,59 +18,88 @@ from parser import parse_avito
 from analytics import analyze
 
 
-# Настраиваем логирование: время + уровень + сообщение в каждой строке
+# Configure application-wide logging.
+# Example output:
+# 2026-01-01 12:00:00 [INFO] Bot started
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger(__name__)
 
-# Router — в aiogram 3.x хэндлеры регистрируются на роутере, а не на dp напрямую.
-# В конце main() роутер подключается к диспетчеру через dp.include_router(router).
+# Main router for registering all message handlers.
+# In aiogram 3.x handlers are attached to Router objects,
+# which are later included into Dispatcher.
 router = Router()
 
 
-# ─────────────────────────────────────────────
-#  FSM: состояния диалога
-# ─────────────────────────────────────────────
-
 class SearchStates(StatesGroup):
-    waiting_for_query = State()  # шаг 1 — ждём поисковый запрос
-    waiting_for_city  = State()  # шаг 2 — ждём название города
+    """
+    Finite State Machine for the search dialog.
 
+    Flow:
+        waiting_for_query -> waiting_for_city
+    """
 
-# ─────────────────────────────────────────────
-#  Хелпер: форматирование текстовой сводки
-# ─────────────────────────────────────────────
+    # Step 1: waiting for the user's search query
+    waiting_for_query = State()
+
+    # Step 2: waiting for the city name
+    waiting_for_city = State()
+
 
 def _format_summary(summary: dict, query: str, city: str) -> str:
     """
-    Превращает словарь аналитики из analytics.py в читаемый текст для Telegram.
-    Использует Markdown-разметку: *жирный*, _курсив_.
+    Convert analytics results into a human-readable Telegram message.
+
+    Parameters:
+        summary: Dictionary returned from analytics.py
+        query: Original search query
+        city: Selected city
+
+    Returns:
+        Formatted Markdown string for Telegram.
     """
+
     lines = [
         f"📊 *Анализ рынка: «{query}» в {city}*\n",
         f"📦 Найдено объявлений: *{summary['total_listings']}*",
         f"💰 С указанной ценой: *{summary['listings_with_price']}*",
     ]
 
-    # Ценовую статистику добавляем только если данные есть (не None)
+    # Add price statistics only if values exist.
+    # Some searches may return listings without prices.
     if summary["median_price"]:
         lines.append(f"📊 Медианная цена: *{int(summary['median_price'])} ₽*")
+
     if summary["min_price"]:
         lines.append(f"📉 Минимальная цена: *{summary['min_price']} ₽*")
+
     if summary["max_price"]:
         lines.append(f"📈 Максимальная цена: *{summary['max_price']} ₽*")
 
-    # Блок топ-продавцов
+    # Top sellers block
     top = summary["top_sellers"]
+
     if not top.empty:
         lines.append("\n🏆 *Топ продавцов:*")
+
         for i, row in top.iterrows():
-            # pd.notna() — правильная проверка на NaN в Pandas.
-            # Обычный `if row["rating"]` не работает с NaN: он не False и не None.
-            rating_str  = str(row["rating"]).replace(".", ",") if pd.notna(row["rating"])        else "—"
-            reviews_str = str(int(row["reviews_count"]))       if pd.notna(row["reviews_count"]) else "—"
+
+            # Pandas stores missing numeric values as NaN.
+            # pd.notna() is the safest way to validate them.
+            rating_str = (
+                str(row["rating"]).replace(".", ",")
+                if pd.notna(row["rating"])
+                else "—"
+            )
+
+            reviews_str = (
+                str(int(row["reviews_count"]))
+                if pd.notna(row["reviews_count"])
+                else "—"
+            )
+
             lines.append(
                 f"{i + 1}. {row['seller_name']} — "
                 f"рейтинг {rating_str} · {reviews_str} отзывов"
@@ -79,20 +108,24 @@ def _format_summary(summary: dict, query: str, city: str) -> str:
     return "\n".join(lines)
 
 
-# ─────────────────────────────────────────────
-#  Хэндлеры
-# ─────────────────────────────────────────────
-
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     """
-    Шаг 0: команда /start.
+    Entry point for the bot.
 
-    Сбрасываем любое старое состояние — пользователь мог прервать прошлый поиск.
-    Переводим в первое состояние и просим ввести запрос.
+    Actions:
+        1. Reset any previous FSM state
+        2. Switch user to waiting_for_query state
+        3. Ask for a search query
     """
+
+    # Clear unfinished dialogs from previous sessions.
+    # This prevents users from getting stuck in old states.
     await state.clear()
+
+    # Move FSM to the first dialog step.
     await state.set_state(SearchStates.waiting_for_query)
+
     await message.answer(
         "👋 Привет! Я соберу данные о конкурентах на Avito.\n\n"
         "🔍 *Что ищем?*\n"
@@ -104,21 +137,27 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 @router.message(SearchStates.waiting_for_query, F.text)
 async def handle_query(message: Message, state: FSMContext) -> None:
     """
-    Шаг 1: получаем поисковый запрос.
-    Сохраняем в FSMContext.data и переходим к следующему состоянию.
-    Фильтр F.text гарантирует, что сюда не попадут стикеры, фото и т.д.
+    Handle the user's search query.
+
+    Actions:
+        1. Validate input
+        2. Save query into FSM storage
+        3. Switch to waiting_for_city state
     """
+
     query = message.text.strip()
 
-    # Защита от пустой строки (пробелы, невидимые символы)
+    # Prevent empty or whitespace-only messages.
     if not query:
         await message.answer("⚠️ Запрос не может быть пустым. Введи текст:")
         return
 
-    # update_data сохраняет данные в хранилище FSM для этого пользователя.
-    # state.get_data() достанет их в следующем хэндлере.
+    # Save query in FSM storage for the next step.
     await state.update_data(query=query)
+
+    # Move dialog to the next state.
     await state.set_state(SearchStates.waiting_for_city)
+
     await message.answer(
         "🏙️ *В каком городе искать?*\n"
         "Введи название города, например: _Москва_",
@@ -129,55 +168,74 @@ async def handle_query(message: Message, state: FSMContext) -> None:
 @router.message(SearchStates.waiting_for_query)
 async def handle_query_wrong_type(message: Message) -> None:
     """
-    Пользователь прислал не текст (фото, стикер, файл) на шаге запроса.
-    Вежливо напоминаем что нужно ввести текст.
+    Handle non-text messages during the query step.
+
+    Example:
+        stickers, photos, voice messages, files
     """
+
     await message.answer("⚠️ Пожалуйста, введи текстовый запрос:")
 
 
 @router.message(SearchStates.waiting_for_city, F.text)
 async def handle_city(message: Message, state: FSMContext) -> None:
     """
-    Шаг 2: получаем город, запускаем парсер и аналитику, отправляем результат.
-    Это главный хэндлер — здесь происходит вся работа.
+    Main business-logic handler.
+
+    Flow:
+        1. Receive city
+        2. Run parser
+        3. Run analytics
+        4. Send summary
+        5. Send Excel report
     """
+
     city = message.text.strip()
 
+    # Validate city name.
     if not city:
         await message.answer("⚠️ Название города не может быть пустым. Введи текст:")
         return
 
-    # Достаём сохранённый запрос из FSMContext
-    data  = await state.get_data()
+    # Retrieve previously saved query from FSM storage.
+    data = await state.get_data()
     query = data["query"]
 
-    # Сбрасываем состояние ДО тяжёлых операций.
-    # Если что-то пойдёт не так — пользователь сможет начать заново через /start,
-    # а не застрянет в состоянии waiting_for_city.
+    # Clear FSM state before heavy operations.
+    # If something crashes later, the user can safely restart via /start.
     await state.clear()
 
-    # Отправляем статусное сообщение — пользователь видит что бот не завис
+    # Send temporary status message so the user understands
+    # that long-running parsing is currently in progress.
     status_msg = await message.answer(
         f"⏳ Собираю данные по запросу *«{query}»* в *{city}*...\n"
         "Это займёт около минуты, пожалуйста подожди.",
         parse_mode="Markdown",
     )
 
-    # ── Шаг A: парсинг ─────────────────────────────────────
-    # parse_avito — блокирующая функция: Selenium открывает браузер и ждёт загрузки.
-    # asyncio.to_thread() запускает её в отдельном потоке, не блокируя event loop.
-    # Без этого бот "завис" бы и не отвечал другим пользователям во время парсинга.
+    # parse_avito() is synchronous and blocking because Selenium
+    # controls a real browser instance.
+    #
+    # asyncio.to_thread() runs it in a separate thread,
+    # preventing the event loop from freezing.
     try:
         listings = await asyncio.to_thread(parse_avito, query, city)
+
     except Exception as e:
-        log.error(f"Ошибка парсера для запроса '{query}' в '{city}': {e}")
+        log.error(f"Parser error for query '{query}' in '{city}': {e}")
+
         await status_msg.edit_text(
             "❌ Не удалось собрать данные. Попробуй позже или "
-            "проверь правильность написания города.\n\nНачать заново: /start"
+            "проверь правильность написания города.\n\n"
+            "Начать заново: /start"
         )
+
         return
 
-    # Парсер вернул пустой список — город не найден или нет объявлений
+    # Empty result usually means:
+    # - city not found
+    # - no listings
+    # - page structure changed
     if not listings:
         await status_msg.edit_text(
             f"😔 По запросу *«{query}»* в *{city}* ничего не найдено.\n\n"
@@ -185,37 +243,54 @@ async def handle_city(message: Message, state: FSMContext) -> None:
             "Начать заново: /start",
             parse_mode="Markdown",
         )
+
         return
 
-    # ── Шаг B: аналитика ───────────────────────────────────
-    # analyze тоже запускаем в потоке: Pandas и запись файла — синхронные операции.
+    # analyze() is also synchronous because Pandas and Excel export
+    # are CPU/file-system bound operations.
     try:
-        summary, excel_path = await asyncio.to_thread(analyze, listings, query, city)
+        summary, excel_path = await asyncio.to_thread(
+            analyze,
+            listings,
+            query,
+            city,
+        )
+
     except Exception as e:
-        log.error(f"Ошибка аналитики для запроса '{query}' в '{city}': {e}")
+        log.error(f"Analytics error for query '{query}' in '{city}': {e}")
+
         await status_msg.edit_text(
             "❌ Данные собраны, но не удалось построить отчёт. "
-            "Попробуй позже.\n\nНачать заново: /start"
+            "Попробуй позже.\n\n"
+            "Начать заново: /start"
         )
+
         return
 
-    # Статусное сообщение выполнило свою роль — удаляем его перед отправкой результата
+    # Remove temporary status message before sending final results.
     await status_msg.delete()
 
-    # ── Шаг C: отправляем текстовую сводку ─────────────────
     summary_text = _format_summary(summary, query, city)
-    await message.answer(summary_text, parse_mode="Markdown")
 
-    # ── Шаг D: отправляем Excel-файл ───────────────────────
-    # Формируем читаемое имя файла для пользователя.
-    # replace + срез — защита от слишком длинных имён.
+    await message.answer(
+        summary_text,
+        parse_mode="Markdown",
+    )
+
+    # Build safe and readable filename.
+    # Limit length to avoid filesystem and Telegram issues.
     safe_query = query.replace(" ", "_")[:20]
-    safe_city  = city.replace(" ", "_")[:15]
-    filename   = f"avito_{safe_query}_{safe_city}.xlsx"
+    safe_city = city.replace(" ", "_")[:15]
 
-    # FSInputFile — правильный способ отправить локальный файл в aiogram 3.x.
-    # path — путь к файлу на диске, filename — имя, которое увидит пользователь.
-    excel_file = FSInputFile(excel_path, filename=filename)
+    filename = f"avito_{safe_query}_{safe_city}.xlsx"
+
+    # FSInputFile is the standard aiogram 3.x way
+    # to upload local files.
+    excel_file = FSInputFile(
+        excel_path,
+        filename=filename,
+    )
+
     await message.answer_document(
         excel_file,
         caption="📎 Полный отчёт в Excel",
@@ -225,34 +300,43 @@ async def handle_city(message: Message, state: FSMContext) -> None:
 @router.message(SearchStates.waiting_for_city)
 async def handle_city_wrong_type(message: Message) -> None:
     """
-    Пользователь прислал не текст на шаге города.
+    Handle non-text messages during the city input step.
     """
+
     await message.answer("⚠️ Пожалуйста, введи название города текстом:")
 
 
-# ─────────────────────────────────────────────
-#  Точка входа
-# ─────────────────────────────────────────────
-
+# Entry point
 async def main() -> None:
-    # Bot — объект для отправки запросов к Telegram API
+    """
+    Configure and start the Telegram bot.
+    """
+
+    # Main Telegram Bot API client.
     bot = Bot(token=BOT_TOKEN)
 
-    # MemoryStorage хранит состояния FSM в оперативной памяти.
-    # При перезапуске бота все незавершённые диалоги сбрасываются — для MVP нормально.
+    # In-memory FSM storage.
+    #
+    # Suitable for MVPs and local development.
+    # All active dialogs will be lost after restart.
     storage = MemoryStorage()
-    dp      = Dispatcher(storage=storage)
 
-    # Подключаем роутер с хэндлерами к диспетчеру.
-    # include_router — стандартный способ в aiogram 3.x.
+    # Main update dispatcher.
+    dp = Dispatcher(storage=storage)
+
+    # Register router with all handlers.
     dp.include_router(router)
 
-    log.info("Бот запущен. Нажми Ctrl+C для остановки.")
+    log.info("Bot started. Press Ctrl+C to stop.")
 
-    # start_polling запускает бесконечный цикл получения обновлений от Telegram.
-    # skip_updates=True — игнорируем сообщения, пришедшие пока бот был выключен,
-    # чтобы не обрабатывать "старые" команды при каждом перезапуске.
-    await dp.start_polling(bot, skip_updates=True)
+    # Start long polling.
+    #
+    # skip_updates=True ignores messages accumulated while
+    # the bot was offline.
+    await dp.start_polling(
+        bot,
+        skip_updates=True,
+    )
 
 
 if __name__ == "__main__":

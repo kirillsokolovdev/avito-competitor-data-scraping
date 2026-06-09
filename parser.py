@@ -1,7 +1,6 @@
 # parser.py
-# Run locally for testing:
-# python parser.py
 
+import logging
 import time
 import random
 import re
@@ -13,6 +12,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
+
+# Configure application-wide logging.
+# Example output:
+# 2026-01-01 12:00:00 [INFO] Browser session closed
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+log = logging.getLogger(__name__)
 
 # Base Avito domain
 BASE_URL = "https://www.avito.ru"
@@ -249,7 +257,7 @@ def parse_avito(query: str, city: str) -> list[dict]:
         List of parsed listing dictionaries.
     """
 
-    print(f"[Parser] Запуск. Запрос: '{query}', Город: '{city}'")
+    log.info(f"Parser started. Query: '{query}'. City: '{city}'")
 
     driver = _build_driver()
 
@@ -287,16 +295,13 @@ def parse_avito(query: str, city: str) -> list[dict]:
 
         # Stop execution if city slug is unsupported
         if not formatted_city:
-            print(
-                f"[Parser] Город '{city}' не найден в справочнике. "
-                f"Доступные города: {list(CITY_SLUGS.keys())}"
-            )
+            log.warning(f"Unsupported city: '{city}'")
             return []
 
         # Build Avito search URL
         url = f"{BASE_URL}/{formatted_city}?q={formatted_query}"
 
-        print(f"[Parser] Открываем: {url}")
+        log.info(f"Opening URL: {url}")
 
         driver.get(url)
 
@@ -319,7 +324,7 @@ def parse_avito(query: str, city: str) -> list[dict]:
             "[data-marker='item']"
         )
 
-        print(f"[Parser] Найдено карточек на странице: {len(cards)}")
+        log.info(f"Listing cards found: {len(cards)}")
 
         # Parse listing cards up to MAX_LISTINGS limit
         for card in cards[:MAX_LISTINGS]:
@@ -330,45 +335,20 @@ def parse_avito(query: str, city: str) -> list[dict]:
             if listing_data:
                 listings.append(listing_data)
 
-        print(
-            f"[Parser] Успешно собрано объявлений: {len(listings)}"
-        )
+        log.info(f"Successfully parsed listings: {len(listings)}")
 
     except TimeoutException:
         # Page did not load or listings were not found
-        print(
-            "[Parser] Таймаут! "
-            "Страница не загрузилась или объявления не найдены."
-        )
+        log.error("Timeout while loading page or listings")
 
     except Exception as e:
         # Catch unexpected runtime errors
-        print(f"[Parser] Непредвиденная ошибка: {e}")
+        log.exception(f"Unexpected parser error: {e}")
 
     finally:
         # Always close browser session
         driver.quit()
 
-        print("[Parser] Браузер закрыт.")
+        log.info("Browser session closed")
 
     return listings
-
-
-# Local test entry point
-# This block runs only when parser.py is executed directly
-if __name__ == "__main__":
-
-    test_data = parse_avito(
-        query="iPhone 15",
-        city="Казань"
-    )
-
-    if test_data:
-        for item in test_data:
-            print(item)
-
-    else:
-        print(
-            "\nДанные не собраны. "
-            "Проверь подключение или селекторы."
-        )
