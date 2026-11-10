@@ -8,6 +8,8 @@ The bot collects listings from Avito using Selenium, analyzes seller and pricing
 
 This project was built as a MVP portfolio project focused on simplicity, clean architecture, and practical business value.
 
+Demonstration: https://youtu.be/VPdWqHA9ufM
+
 ---
 
 # Features
